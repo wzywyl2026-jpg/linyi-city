@@ -1,0 +1,181 @@
+<title>临沂北城三维城市</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&text=%E4%B8%B4%E6%B2%82%E5%8C%97%E5%9F%8E%C2%B7&display=swap">
+<style>
+/* Layout: full-bleed WebGL city; a calligraphic name plate top-left; one glass control deck at the bottom. Single deliberate dusk-glass look. */
+:root {
+  --deck: rgba(13, 18, 21, 0.72);
+  --deck-solid: #0d1215;
+  --line: rgba(206, 222, 216, 0.16);
+  --fg: #edf1ee;
+  --muted: #a3b3ad;
+  --jade: #93ccb6;
+  --jade-ink: #0f2a22;
+  --sun: #f0c88a;
+  --font-brush: "Ma Shan Zheng", "STKaiti", "KaiTi", serif;
+  --font-ui: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 10px;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { margin: 0; overflow: hidden; background: var(--deck-solid); color: var(--fg); font-family: var(--font-ui); font-size: 14px; -webkit-font-smoothing: antialiased; }
+#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
+
+.brand { position: fixed; top: 0; left: 0; padding-top: calc(14px + env(safe-area-inset-top, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: 16px; pointer-events: none; text-shadow: 0 1px 12px rgba(0,0,0,.55); display: grid; gap: 2px; max-width: min(520px, calc(100vw - 32px)); }
+.brand::before { content: ""; position: absolute; inset: -40px -80px -30px -40px; background: radial-gradient(closest-side, rgba(8,12,14,.3), rgba(8,12,14,0)); z-index: -1; }
+.brand h1 { margin: 0; font-family: var(--font-brush); font-weight: 400; font-size: clamp(34px, 5vw, 52px); line-height: 1; letter-spacing: 0.04em; }
+.brand .sub { margin: 4px 0 0; font-size: 12.5px; color: #c9d4cf; letter-spacing: 0.06em; }
+.brand .readout { margin: 6px 0 0; font-family: var(--font-num); font-size: 12.5px; color: var(--sun); letter-spacing: 0.02em; font-variant-numeric: tabular-nums; }
+
+.deck { position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(820px, calc(100vw - 2 * max(16px, env(safe-area-inset-left, 0px)))); background: var(--deck); backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; display: grid; gap: 9px; box-shadow: 0 10px 40px rgba(0,0,0,.35); z-index: 5; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.row-time { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.slider { flex: 1; min-width: 120px; display: grid; }
+.clock { font-family: var(--font-num); font-size: 20px; color: var(--sun); font-variant-numeric: tabular-nums; min-width: 4.4ch; }
+input[type=range] { width: 100%; min-width: 0; margin: 0; accent-color: var(--sun); height: 20px; }
+.ticks { display: flex; justify-content: space-between; font-family: var(--font-num); font-size: 10px; color: var(--muted); padding: 0 3px; line-height: 1; }
+.row-opts { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; }
+.grp { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.grp.end { margin-left: auto; }
+.k { font-size: 12px; color: var(--muted); letter-spacing: 0.12em; margin-right: 2px; }
+.meta { font-family: var(--font-num); font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 4px; }
+
+button, select { font: inherit; font-size: 13px; color: var(--fg); background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; cursor: pointer; line-height: 1.2; }
+button:hover, select:hover { background: rgba(255,255,255,0.12); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--jade); outline-offset: 2px; }
+button[aria-pressed="true"] { background: var(--jade); color: var(--jade-ink); border-color: transparent; font-weight: 500; }
+button.ghost { background: transparent; color: var(--muted); }
+select { padding-right: 4px; }
+select option { background: var(--deck-solid); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; background: transparent; padding: 5px 11px; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--jade); }
+.deck.collapsed .row-opts { display: none; }
+
+#hint { position: fixed; left: 50%; transform: translateX(-50%); top: calc(16px + env(safe-area-inset-top, 0px)); background: var(--deck); border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px; font-size: 12.5px; color: var(--fg); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); pointer-events: none; z-index: 4; white-space: nowrap; max-width: calc(100vw - 32px); overflow: hidden; text-overflow: ellipsis; }
+#joy { position: fixed; inset: 0; z-index: 2; touch-action: none; }
+
+#labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 1; }
+.lbl { position: absolute; left: 0; top: 0; width: 0; height: 0; transition: opacity .25s; will-change: transform; }
+.lbl > * { position: absolute; left: 0; transform: translateX(-50%); white-space: nowrap; }
+.lbl-t { bottom: 22px; font-size: 13px; font-weight: 500; padding: 3px 9px; border-radius: 6px; background: rgba(12,16,19,.62); border: 1px solid var(--line); letter-spacing: .04em; }
+.lbl-s { bottom: 2px; font-family: var(--font-num); font-size: 10.5px; color: var(--sun); }
+.lbl::after { content: ""; position: absolute; left: -0.5px; bottom: 0; width: 1px; height: 22px; background: linear-gradient(rgba(237,241,238,.7), rgba(237,241,238,0)); }
+.lbl-major .lbl-t { font-size: 14px; background: rgba(12,16,19,.78); border-color: rgba(240,200,138,.45); }
+.lbl-water .lbl-t { background: none; border: 0; color: #bfe3ef; text-shadow: 0 1px 6px rgba(0,0,0,.7); letter-spacing: .3em; font-size: 14px; bottom: 6px; }
+.lbl-water::after { display: none; }
+.lbl-water .lbl-s { bottom: -12px; color: #9fc7d6; font-family: var(--font-ui); letter-spacing: .1em; }
+
+.attrib { position: fixed; right: max(10px, env(safe-area-inset-right, 0px)); bottom: calc(4px + env(safe-area-inset-bottom, 0px)); font-size: 10.5px; color: rgba(237,241,238,.62); z-index: 1; }
+.attrib a { color: inherit; }
+
+#loading { position: fixed; inset: 0; z-index: 20; background: radial-gradient(120% 90% at 30% 20%, #1c2a2e 0%, #0d1215 60%); display: grid; place-items: center; transition: opacity .8s ease; }
+#loading.done { opacity: 0; pointer-events: none; }
+.ld { display: grid; gap: 14px; justify-items: center; padding-inline: max(16px, env(safe-area-inset-left, 0px)); text-align: center; }
+.ld .nm { font-family: var(--font-brush); font-size: clamp(54px, 10vw, 88px); line-height: 1; letter-spacing: .06em; }
+.ld .cap { color: var(--muted); font-size: 13px; letter-spacing: .1em; }
+.ld .bar { width: min(260px, 70vw); height: 2px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.ld #load-bar { display: block; height: 100%; width: 0; background: var(--sun); transition: width .3s; }
+.ld #load-step { font-size: 12.5px; color: var(--fg); min-height: 1.4em; max-width: 34ch; }
+
+@media (max-width: 640px) {
+  .deck { bottom: calc(8px + env(safe-area-inset-bottom, 0px)); padding: 9px; gap: 8px; border-radius: 12px; }
+  .row-time { flex-wrap: wrap; }
+  .slider { order: 5; flex-basis: 100%; }
+  .k { display: none; }
+  .seg button { padding: 5px 8px; }
+  button, select { font-size: 12.5px; padding: 5px 8px; }
+  .brand h1 { font-size: 34px; }
+  .brand .sub { display: none; }
+  .clock { font-size: 17px; }
+  .meta { display: none; }
+  .attrib { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .lbl, #loading, .ld #load-bar { transition: none; } }
+</style>
+
+<canvas id="scene" tabindex="0" aria-label="临沂北城新区三维城市场景"></canvas>
+<div id="labels" aria-hidden="true"></div>
+<div id="joy" hidden></div>
+
+<header class="brand">
+  <h1>临沂·北城</h1>
+  <p class="sub">兰山区北城新区 · 沂河、祊河、柳青河三河交汇处</p>
+  <p class="readout" id="readout">—</p>
+</header>
+
+<div id="hint" hidden></div>
+
+<section class="deck" id="panel" aria-label="场景控制">
+  <div class="row-time">
+    <span class="clock" id="time-val">16:45</span>
+    <div class="slider">
+      <label for="time" class="vh">一天中的时间</label>
+      <input id="time" type="range" min="0" max="1439" step="1" value="1005">
+      <div class="ticks" aria-hidden="true"><span>0</span><span>6</span><span>12</span><span>18</span><span>24</span></div>
+    </div>
+    <button id="play" type="button" aria-pressed="true">暂停</button>
+    <select id="rate" aria-label="时间流速">
+      <option value="1">实时</option>
+      <option value="60" selected>1秒=1分</option>
+      <option value="600">1秒=10分</option>
+    </select>
+    <button id="now" type="button" title="切换到北京时间此刻">现在</button>
+    <button id="collapse" type="button" aria-expanded="true" class="ghost">收起</button>
+  </div>
+  <div class="row-opts">
+    <div class="grp"><span class="k">天气</span>
+      <div class="seg" role="group" aria-label="天气">
+        <button type="button" data-weather="clear" aria-pressed="true">晴</button>
+        <button type="button" data-weather="cloudy" aria-pressed="false">多云</button>
+        <button type="button" data-weather="rain" aria-pressed="false">雨</button>
+        <button type="button" data-weather="fog" aria-pressed="false">雾</button>
+        <button type="button" data-weather="snow" aria-pressed="false">雪</button>
+      </div>
+    </div>
+    <div class="grp"><span class="k">视角</span>
+      <div class="seg" role="group" aria-label="视角">
+        <button type="button" data-mode="orbit" aria-pressed="true">俯瞰</button>
+        <button type="button" data-mode="walk" aria-pressed="false">步行</button>
+        <button type="button" data-mode="fly" aria-pressed="false">飞行</button>
+        <button type="button" data-mode="follow" aria-pressed="false">跟车</button>
+      </div>
+    </div>
+  </div>
+  <div class="row-opts">
+    <div class="grp places"><span class="k">去往</span>
+      <button type="button" data-place="tower">电视塔</button>
+      <button type="button" data-place="lake">五洲湖</button>
+      <button type="button" data-place="river">沂河</button>
+      <button type="button" data-place="culture">文化中心</button>
+      <button type="button" data-place="overview">全景</button>
+    </div>
+    <div class="grp end">
+      <span class="meta" id="sun-el">太阳高度 —</span>
+      <button type="button" id="labels-t" aria-pressed="true">标注</button>
+      <button type="button" id="quality-t" aria-pressed="true">画质 高</button>
+    </div>
+  </div>
+</section>
+
+<p class="attrib">建筑与道路：<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap 贡献者</a></p>
+
+<div id="loading">
+  <div class="ld">
+    <div class="nm">临沂·北城</div>
+    <div class="cap">正在生成城市</div>
+    <div class="bar"><span id="load-bar"></span></div>
+    <div id="load-step">读取地图</div>
+  </div>
+</div>
+
+<script type="application/json" id="city-data">%%DATA%%</script>
+<script type="importmap">%%IMPORTMAP%%</script>
+<script type="module">
+%%APP%%
+</script>
