@@ -17,6 +17,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 const D = JSON.parse(document.getElementById('city-data').textContent);
 const LAT = 35.0905, LON = 118.359;
 const [BX0, BZ0, BX1, BZ1] = D.bbox;
+const REGIONS = D.regions || [D.bbox];
 const $ = (id) => document.getElementById(id);
 const isTouch = matchMedia('(pointer: coarse)').matches;
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -432,8 +433,12 @@ function buildGround() {
   const gp = g.attributes.position, gc = new Float32Array(gp.count * 3);
   for (let i = 0; i < gp.count; i++) {
     const x = gp.getX(i), z = gp.getZ(i);
-    const dx = Math.max(0, Math.abs(x - (BX0 + BX1) / 2) - (BX1 - BX0) / 2), dz = Math.max(0, Math.abs(z - (BZ0 + BZ1) / 2) - (BZ1 - BZ0) / 2);
-    const t = smooth(0, 1800, Math.hypot(dx, dz));
+    let dmin = 1e9;
+    for (const [rx0, rz0, rx1, rz1] of REGIONS) {
+      const dx = Math.max(0, rx0 - x, x - rx1), dz = Math.max(0, rz0 - z, z - rz1);
+      dmin = Math.min(dmin, Math.hypot(dx, dz));
+    }
+    const t = smooth(0, 1800, dmin);
     gc[i * 3] = lerp(1, 0.84, t); gc[i * 3 + 1] = lerp(1, 0.92, t); gc[i * 3 + 2] = lerp(1, 0.8, t);
   }
   g.setAttribute('color', new THREE.BufferAttribute(gc, 3));
@@ -729,7 +734,7 @@ function buildRoads() {
 let crownMesh, trunkMesh, crownMat;
 function buildTrees() {
   const T = D.trees, n = T.length / 4;
-  const crownGeo = new THREE.IcosahedronGeometry(1, 2);
+  const crownGeo = new THREE.IcosahedronGeometry(1, 1);
   {
     const p = crownGeo.attributes.position; const r = rng(5);
     const map = new Map();
@@ -938,7 +943,7 @@ function buildTraffic() {
   }
   traffic.nodes = nodes;
   const totalLen = traffic.edges.reduce((s, e) => s + e.len * (e.ow ? 1 : 2), 0);
-  const N = Math.min(900, Math.floor(totalLen / 70));
+  const N = Math.min(1400, Math.floor(totalLen / 70));
   // geometry: body w/ dark glass + wheels via vertex colour
   const vc = (g, c) => { const n = g.attributes.position.count, a = new Float32Array(n * 3).fill(c); g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g; };
   const box = (w, h, l, x, y, z, c) => { const g = new THREE.BoxGeometry(w, h, l); g.translate(x, y, z); return vc(g, c); };
@@ -1092,7 +1097,7 @@ function buildWeatherFX() {
 
 // ---------- walkability raster (2 m / px) ----------
 function buildWalkMask() {
-  const S = 2, W = Math.ceil((BX1 - BX0) / S), H = Math.ceil((BZ1 - BZ0) / S);
+  const S = 3, W = Math.ceil((BX1 - BX0) / S), H = Math.ceil((BZ1 - BZ0) / S);
   const c = makeCanvas(W, H), g = c.getContext('2d', { willReadFrequently: true });
   const tx = (x) => (x - BX0) / S, tz = (z) => (z - BZ0) / S;
   g.fillStyle = 'rgb(255,0,0)'; g.fillRect(0, 0, W, H);
@@ -1149,6 +1154,9 @@ function buildLabels() {
   add('沂河', '', 1250, 6, 250, 'water');
   add('祊河', '', -1050, 6, 720, 'water');
   add('柳青河', '', 300, 6, -300, 'water');
+  add('祊河', '', -4520, 6, -2620, 'water');
+  add('祊河', '', -2650, 6, -1000, 'water');
+  add('沂河', '', 2040, 6, -3000, 'water');
   add('三河口', '沂·祊·柳青交汇', 120, 6, 1330, 'water');
   for (const [n, sub] of [['临沂大剧院', ''], ['临沂市文化中心', ''], ['临沂市科技馆', ''], ['临沂市博物馆', '']]) { const c = centroidOf(n); if (c) add(n, sub, c[0], c[1] + 10, c[2]); }
   const br = D.r.find((r) => r[4] === '北京路沂河大桥');
@@ -1270,7 +1278,7 @@ function updateEnvironment(dt, t) {
   scene.fog.color.copy(fogDay);
   // haze thins with altitude, so high aerial views of the whole district stay readable
   const alt = Math.max(0, camera.position.y - 150);
-  scene.fog.density = w.fog * (1 + night * 0.4) * Math.max(0.42, 1 / (1 + alt / 650));
+  scene.fog.density = w.fog * (1 + night * 0.4) * Math.max(0.24, 1 / (1 + alt / 650));
   // clouds
   const cu = clouds.material.uniforms;
   cu.uCover.value = w.cover; cu.uTime.value = t; cu.uSunDir.value.copy(sunV); cu.uDark.value = w.dark;
@@ -1333,16 +1341,18 @@ function updateEnvironment(dt, t) {
 // ---------- camera & controls ----------
 const controls = new MapControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.dampingFactor = 0.08;
-controls.maxPolarAngle = Math.PI * 0.47; controls.minDistance = 25; controls.maxDistance = 7500;
+controls.maxPolarAngle = Math.PI * 0.47; controls.minDistance = 25; controls.maxDistance = 11000;
 controls.screenSpacePanning = false; controls.zoomToCursor = true;
 
 const PLACES = {
-  overview: { label: '全景', pos: [-3300, 2300, 2200], target: [-100, 0, -1300] },
+  overview: { label: '全景', pos: [-4600, 4300, 4300], target: [-1300, 0, -1500] },
   tower: { label: '电视塔', pos: [-120, 210, 1590], target: [300, 130, 1010] },
   lake: { label: '五洲湖', pos: [-380, 330, -560], target: [-760, 0, -1010] },
   river: { label: '沂河', pos: [520, 140, 380], target: [1180, 10, -420] },
   culture: { label: '文化中心', pos: [-260, 260, 200], target: [-720, 20, -260] },
   north: { label: '南京路', pos: [650, 320, -3600], target: [-250, 0, -4300] },
+  fang: { label: '祊河', pos: [-3000, 420, -1700], target: [-4200, 0, -2650] },
+  yieast: { label: '沂河东岸', pos: [3300, 380, -1500], target: [2100, 0, -2900] },
 };
 let flight = null;
 function flyTo(key, dur = 2.4) {
@@ -1596,7 +1606,7 @@ async function boot() {
   requestAnimationFrame(loop);
   $('loading').classList.add('done');
   setTimeout(() => { $('loading').hidden = true; }, 900);
-  window.__city = { scene, camera, state, setMode, flyTo, world, traffic, water, waterSimple, setQuality, renderer };
+  window.__city = { scene, camera, state, setMode, flyTo, world, traffic, water, waterSimple, setQuality, renderer, PLACES, controls };
 }
 boot().catch((err) => {
   console.error(err);

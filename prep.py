@@ -2,6 +2,7 @@
 
 data/osm.txt        original district (上海路 south to 三河口), z in [-1770, 1770]
 data/osm_north.txt  northern extension (上海路 north to 南京路), z in [-4600, -1770];
+                    (osm_we.txt: west 祊河 side x<-1500 and east 沂河 side x>1500)
                     its roads are already cut exactly at the z = -1770 seam.
 
 Coordinates: x = metres east of origin, z = metres south of origin
@@ -11,8 +12,20 @@ import json, math, random, re
 import numpy as np
 
 random.seed(7)
-X0, X1, Z0, Z1 = -1500, 1500, -4600, 1770
-SEAM = -1770  # boundary between the two extracts
+# mapped regions: centre (original + north), west (祊河 side) and east (沂河 side)
+REG_C = (-1500, -4600, 1500, 1770)
+REG_W = (-6200, -5000, -1500, 1770)
+REG_E = (1500, -4600, 3700, 1770)
+REGIONS = [REG_C, REG_W, REG_E]
+X0, Z0 = min(r[0] for r in REGIONS), min(r[1] for r in REGIONS)
+X1, Z1 = max(r[2] for r in REGIONS), max(r[3] for r in REGIONS)
+SEAM = -1770  # boundary between the two centre extracts
+CUT_X = sorted({r[0] for r in REGIONS} | {r[2] for r in REGIONS})
+CUT_Z = sorted({r[1] for r in REGIONS} | {r[3] for r in REGIONS})
+
+
+def in_regions(x, z, pad=0):
+    return any(r[0] + pad < x < r[2] - pad and r[1] + pad < z < r[3] - pad for r in REGIONS)
 
 
 def dec(s):
@@ -50,8 +63,45 @@ def cut_south(p):
     return runs
 
 
+def clip_rect(p, R):
+    """Clip a polyline to rectangle R=(x0,z0,x1,z1); returns list of runs."""
+    x0, z0, x1, z1 = R
+    runs, cur = [], []
+    for i in range(1, len(p)):
+        (ax, az), (bx, bz) = p[i - 1], p[i]
+        dx, dz = bx - ax, bz - az
+        t0, t1 = 0.0, 1.0
+        ok = True
+        for pp, qq in ((-dx, ax - x0), (dx, x1 - ax), (-dz, az - z0), (dz, z1 - az)):
+            if pp == 0:
+                if qq < 0: ok = False; break
+            else:
+                t = qq / pp
+                if pp < 0: t0 = max(t0, t)
+                else: t1 = min(t1, t)
+        if not ok or t0 > t1:
+            if len(cur) > 1: runs.append(cur)
+            cur = []
+            continue
+        A = (round(ax + t0 * dx, 1), round(az + t0 * dz, 1)) if t0 > 0 else (ax, az)
+        B = (round(ax + t1 * dx, 1), round(az + t1 * dz, 1)) if t1 < 1 else (bx, bz)
+        if not cur:
+            cur = [A]
+        elif cur[-1] != A:
+            if len(cur) > 1: runs.append(cur)
+            cur = [A]
+        cur.append(B)
+        if t1 < 1:
+            if len(cur) > 1: runs.append(cur)
+            cur = []
+    if len(cur) > 1: runs.append(cur)
+    return [r for r in runs if sum(math.dist(r[k - 1], r[k]) for k in range(1, len(r))) > 1]
+
+
 water, green, builds, roads, rivers, nodes = [], [], [], [], [], []
-lines = [(l, 'S') for l in open('data/osm.txt', encoding='utf8')] + [(l, 'N') for l in open('data/osm_north.txt', encoding='utf8')]
+lines = ([(l, 'S') for l in open('data/osm.txt', encoding='utf8')] +
+         [(l, 'N') for l in open('data/osm_north.txt', encoding='utf8')] +
+         [(l, 'WE') for l in open('data/osm_we.txt', encoding='utf8')])
 for line, src in lines:
     f = line.rstrip('\n').split('|')
     k = f[0]
@@ -65,7 +115,12 @@ for line, src in lines:
         builds.append(dict(h=f[1], lv=f[2], t=f[3], n=f[4], p=dec(f[5])))
     elif k == 'R':
         p = dec(f[7])
-        for run in (cut_south(p) if src == 'S' else [p]):
+        if f[3] == '1' and src != 'WE':
+            runs = cut_south(p) if src == 'S' else [p]  # bridges stay whole across the x seams
+        else:
+            R = REG_C if src != 'WE' else (REG_W if p[0][0] < 0 else REG_E)
+            runs = [q for r0 in (cut_south(p) if src == 'S' else [p]) for q in clip_rect(r0, R)]
+        for run in runs:
             roads.append(dict(c=f[1], lanes=f[2], br=f[3] == '1', layer=f[4], ow=f[5] == '1', n=f[6], p=run))
     elif k == 'V':
         rivers.append((f[1], f[2], dec(f[3])))
@@ -276,9 +331,10 @@ for b in builds:
 
 # ---------- water banks ----------
 def on_edge(ax, az, bx, bz):
+    """Edges lying on a region boundary are extract cut lines, not real banks."""
     e = 2
-    return ((abs(ax - X0) < e and abs(bx - X0) < e) or (abs(ax - X1) < e and abs(bx - X1) < e) or
-            (abs(az - Z0) < e and abs(bz - Z0) < e) or (abs(az - Z1) < e and abs(bz - Z1) < e))
+    return (any(abs(ax - c) < e and abs(bx - c) < e for c in CUT_X) or
+            any(abs(az - c) < e and abs(bz - c) < e for c in CUT_Z))
 
 
 def in_other_water(x, z, skip):
@@ -402,14 +458,14 @@ trees = []  # x, z, scale, type (0 broadleaf,1 conifer-ish,2 willow)
 
 
 def ok_tree(x, z, pad=1.2):
-    if not (X0 < x < X1 and Z0 < z < Z1):
+    if not in_regions(x, z):
         return False
     if in_water(x, z) or in_building(x, z, 2.5) or near_road(x, z, pad):
         return False
     return True
 
 
-dens = {'wood': 1 / 45, 'park': 1 / 220, 'grass': 1 / 500}
+dens = {'wood': 1 / 70, 'park': 1 / 260, 'grass': 1 / 600}
 for kd, p in green:
     if kd not in dens:
         continue
@@ -484,6 +540,7 @@ def flat(p, r=1):
 
 out = {
     'bbox': [X0, Z0, X1, Z1],
+    'regions': [list(r) for r in REGIONS],
     'water': [[flat(o)] + [flat(h) for h in hs] for o, hs in water],
     'banks': [[s] + flat(ch) for s, ch in bank_out],
     'green': [[k, flat(p)] for k, p in green if k != 'pitch'] + [['pitch', flat(p)] for k, p in green if k == 'pitch'],
