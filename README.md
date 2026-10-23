@@ -6,6 +6,13 @@
 - 精建地标：临沂广播电视塔（326 m，球形塔楼、算盘珠、Y 形桁架、螺旋桁架、竹简塔座）、五洲湖及岛屿、沂河/祊河/柳青河石砌河岸与滨水步道。
 - 昼夜（按临沂经纬度和当天日期计算太阳位置）、晴/多云/雨/雾/雪、最多约 1400 辆车的车流、俯瞰/步行/飞行/跟车视角。
 
+## 网站（发给别人看）
+
+`docs/` 是可以直接部署的完整网站：`docs/index.html` 加上 `docs/lib/` 里自带的 three.js，不依赖任何第三方 CDN 或网络字体，国内网络也能打开。
+
+用 GitHub Pages 发布：仓库 Settings → Pages → Source 选 “Deploy from a branch”，Branch 选 `main`、文件夹选 `/docs`，保存后约一分钟可以通过 `https://wzywyl2026-jpg.github.io/linyi-city/` 访问。免费账户的 Pages 只能用于公开仓库。
+`docs/` 也可以整个上传到任何静态网站托管（Netlify、Vercel、Cloudflare Pages、阿里云 OSS 等）。
+
 ## 直接打开
 
 `index.html` 是完整的单文件页面，用浏览器打开即可（需要联网加载 three.js 和字体）。
@@ -22,7 +29,7 @@
 | `data/osm_we.txt` | 西片（x < -1500，祊河两岸）和东片（x > 1500，沂河东岸）地图数据；河道多边形已按片区边界裁好 |
 | `prep.py` | 合并三份数据（中片道路裁到 x ∈ [-1500, 1500]，跨缝的桥保持完整）并处理成 `data/data.json`：推算楼高、生成河岸、布置行道树和路灯 |
 | `data/data.json` | 处理后的场景数据 |
-| `build.py` | 生成 `dist/linyi-city.html`（发布用）、`index.html`（GitHub Pages 用）、`test/index.html`（本地测试用） |
+| `build.py` | 生成 `docs/`（独立网站）、`dist/linyi-city.html`（单文件版）、`index.html`（单文件版，从 CDN 加载 three.js）、`test/index.html`（本地测试用） |
 
 ## 修改流程
 
