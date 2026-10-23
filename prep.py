@@ -1,13 +1,18 @@
-"""Turn compact OSM extract (osm.txt) into scene data for the 3D page.
+"""Turn compact OSM extracts into scene data for the 3D page.
+
+data/osm.txt        original district (上海路 south to 三河口), z in [-1770, 1770]
+data/osm_north.txt  northern extension (上海路 north to 南京路), z in [-4600, -1770];
+                    its roads are already cut exactly at the z = -1770 seam.
 
 Coordinates: x = metres east of origin, z = metres south of origin
 (origin 35.0905N 118.359E). Output: data.json
 """
-import json, math, random
+import json, math, random, re
 import numpy as np
 
 random.seed(7)
-X0, X1, Z0, Z1 = -1500, 1500, -1770, 1770
+X0, X1, Z0, Z1 = -1500, 1500, -4600, 1770
+SEAM = -1770  # boundary between the two extracts
 
 
 def dec(s):
@@ -23,8 +28,31 @@ def dec(s):
     return pts
 
 
+def cut_south(p):
+    """Keep the part of a polyline with z >= SEAM, splitting exactly at the seam."""
+    runs, cur = [], []
+    for i, (x, z) in enumerate(p):
+        inside = z >= SEAM
+        if i:
+            px, pz = p[i - 1]
+            if (pz >= SEAM) != inside:
+                t = (SEAM - pz) / (z - pz)
+                m = (round((px + t * (x - px)) * 2) / 2, SEAM)
+                cur.append(m)
+                if not inside:
+                    if len(cur) > 1: runs.append(cur)
+                    cur = []
+                else:
+                    cur = [m]
+        if inside:
+            cur.append((x, z))
+    if len(cur) > 1: runs.append(cur)
+    return runs
+
+
 water, green, builds, roads, rivers, nodes = [], [], [], [], [], []
-for line in open('data/osm.txt', encoding='utf8'):
+lines = [(l, 'S') for l in open('data/osm.txt', encoding='utf8')] + [(l, 'N') for l in open('data/osm_north.txt', encoding='utf8')]
+for line, src in lines:
     f = line.rstrip('\n').split('|')
     k = f[0]
     if k == 'W':
@@ -36,7 +64,9 @@ for line in open('data/osm.txt', encoding='utf8'):
     elif k == 'B':
         builds.append(dict(h=f[1], lv=f[2], t=f[3], n=f[4], p=dec(f[5])))
     elif k == 'R':
-        roads.append(dict(c=f[1], lanes=f[2], br=f[3] == '1', layer=f[4], ow=f[5] == '1', n=f[6], p=dec(f[7])))
+        p = dec(f[7])
+        for run in (cut_south(p) if src == 'S' else [p]):
+            roads.append(dict(c=f[1], lanes=f[2], br=f[3] == '1', layer=f[4], ow=f[5] == '1', n=f[6], p=run))
     elif k == 'V':
         rivers.append((f[1], f[2], dec(f[3])))
     elif k == 'N':
@@ -198,8 +228,9 @@ for b in builds:
     b['k'] = kind(b)
     n = b['n']
     lv = int(b['lv']) if b['lv'].isdigit() else 0
-    if b['h']:
-        H = float(b['h'])
+    hm = re.match(r'\s*([0-9.]+)', b['h'])
+    if hm:
+        H = float(hm.group(1))
     elif n in NAMED and NAMED[n]:
         H = NAMED[n]
     elif lv > 0:

@@ -204,12 +204,13 @@ const clouds = new THREE.Mesh(new THREE.PlaneGeometry(70000, 70000, 1, 1), new T
       vec3 col = mix(uAmb*0.8, uSunCol, lit*(1.0-uDark*0.7));
       float dist = length(vW.xz - cameraPosition.xz);
       float fade = 1.0 - smoothstep(9000., 30000., dist);
-      gl_FragColor = vec4(col, d*fade);
+      float below = smoothstep(150., 700., vW.y - cameraPosition.y); // only seen from underneath
+      gl_FragColor = vec4(col, d*fade*below);
     }`,
   transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false,
 }));
 clouds.rotation.x = Math.PI / 2;
-clouds.position.y = 1900;
+clouds.position.y = 3400;
 clouds.renderOrder = -500;
 scene.add(clouds);
 
@@ -428,12 +429,12 @@ function buildGround() {
   g.rotateX(-Math.PI / 2);
   const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 60000, uv.getY(i) * 60000);
   // beyond the mapped district the ground fades to a darker, greener outskirts tone
-  const gp = g.attributes.position, gc = new Float32Array(gp.count * 3), far = new THREE.Color(0x5d6650).convertSRGBToLinear();
+  const gp = g.attributes.position, gc = new Float32Array(gp.count * 3);
   for (let i = 0; i < gp.count; i++) {
     const x = gp.getX(i), z = gp.getZ(i);
     const dx = Math.max(0, Math.abs(x - (BX0 + BX1) / 2) - (BX1 - BX0) / 2), dz = Math.max(0, Math.abs(z - (BZ0 + BZ1) / 2) - (BZ1 - BZ0) / 2);
     const t = smooth(0, 1800, Math.hypot(dx, dz));
-    gc[i * 3] = lerp(1, far.r * 1.6, t); gc[i * 3 + 1] = lerp(1, far.g * 1.6, t); gc[i * 3 + 2] = lerp(1, far.b * 1.6, t);
+    gc[i * 3] = lerp(1, 0.84, t); gc[i * 3 + 1] = lerp(1, 0.92, t); gc[i * 3 + 2] = lerp(1, 0.8, t);
   }
   g.setAttribute('color', new THREE.BufferAttribute(gc, 3));
   const m = new THREE.Mesh(g, MAT.ground);
@@ -937,7 +938,7 @@ function buildTraffic() {
   }
   traffic.nodes = nodes;
   const totalLen = traffic.edges.reduce((s, e) => s + e.len * (e.ow ? 1 : 2), 0);
-  const N = Math.min(520, Math.floor(totalLen / 70));
+  const N = Math.min(900, Math.floor(totalLen / 70));
   // geometry: body w/ dark glass + wheels via vertex colour
   const vc = (g, c) => { const n = g.attributes.position.count, a = new Float32Array(n * 3).fill(c); g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g; };
   const box = (w, h, l, x, y, z, c) => { const g = new THREE.BoxGeometry(w, h, l); g.translate(x, y, z); return vc(g, c); };
@@ -1152,6 +1153,15 @@ function buildLabels() {
   for (const [n, sub] of [['临沂大剧院', ''], ['临沂市文化中心', ''], ['临沂市科技馆', ''], ['临沂市博物馆', '']]) { const c = centroidOf(n); if (c) add(n, sub, c[0], c[1] + 10, c[2]); }
   const br = D.r.find((r) => r[4] === '北京路沂河大桥');
   if (br) { const p = pairs(br[5]); add('北京路沂河大桥', '', (p[0][0] + p[p.length - 1][0]) / 2, 22, (p[0][1] + p[p.length - 1][1]) / 2); }
+  // east-west avenues of 北城新区, labelled where they cross the middle of the district
+  for (const name of ['北京路', '上海路', '天津路', '济南路', '广州路', '成都路', '武汉路', '南京路']) {
+    let best = null, bd = 1e9;
+    for (const r of D.r) {
+      if (r[4] !== name || r[2]) continue;
+      for (const [x, z] of pairs(r[5])) { const d = Math.abs(x + 350); if (d < bd) { bd = d; best = [x, z]; } }
+    }
+    if (best && bd < 400) add(name, '', best[0], 4, best[1], 'road');
+  }
   const host = $('labels');
   for (const l of L) {
     const el = document.createElement('div');
@@ -1168,7 +1178,7 @@ function updateLabels() {
     if (!show) { l.el.style.opacity = 0; continue; }
     _v.copy(l.pos).project(camera);
     const dist = camera.position.distanceTo(l.pos);
-    const vis = _v.z < 1 && Math.abs(_v.x) < 1.1 && Math.abs(_v.y) < 1.1 && dist < (l.kind === 'major' ? 9000 : 3800) && dist > 25;
+    const vis = _v.z < 1 && Math.abs(_v.x) < 1.1 && Math.abs(_v.y) < 1.1 && dist < (l.kind === 'major' ? 9000 : l.kind === 'road' ? 2600 : 3800) && dist > 25;
     l.el.style.opacity = vis ? (l.kind === 'major' ? 1 : clamp(1.4 - dist / 3800, 0.35, 1)) : 0;
     if (vis) l.el.style.transform = `translate(${(_v.x * 0.5 + 0.5) * innerWidth}px, ${(-_v.y * 0.5 + 0.5) * innerHeight}px)`;
   }
@@ -1258,7 +1268,9 @@ function updateEnvironment(dt, t) {
   fogDay.lerp(C(0x1c1d26), night);
   if (w.snow > 0.3) fogDay.lerp(C(0xc8cdd3), w.snow * day * 0.6);
   scene.fog.color.copy(fogDay);
-  scene.fog.density = w.fog * (1 + night * 0.4);
+  // haze thins with altitude, so high aerial views of the whole district stay readable
+  const alt = Math.max(0, camera.position.y - 150);
+  scene.fog.density = w.fog * (1 + night * 0.4) * Math.max(0.42, 1 / (1 + alt / 650));
   // clouds
   const cu = clouds.material.uniforms;
   cu.uCover.value = w.cover; cu.uTime.value = t; cu.uSunDir.value.copy(sunV); cu.uDark.value = w.dark;
@@ -1321,15 +1333,16 @@ function updateEnvironment(dt, t) {
 // ---------- camera & controls ----------
 const controls = new MapControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.dampingFactor = 0.08;
-controls.maxPolarAngle = Math.PI * 0.47; controls.minDistance = 25; controls.maxDistance = 5200;
+controls.maxPolarAngle = Math.PI * 0.47; controls.minDistance = 25; controls.maxDistance = 7500;
 controls.screenSpacePanning = false; controls.zoomToCursor = true;
 
 const PLACES = {
-  overview: { label: '全景', pos: [-1700, 1250, 2650], target: [-150, 0, -100] },
+  overview: { label: '全景', pos: [-3300, 2300, 2200], target: [-100, 0, -1300] },
   tower: { label: '电视塔', pos: [-120, 210, 1590], target: [300, 130, 1010] },
   lake: { label: '五洲湖', pos: [-380, 330, -560], target: [-760, 0, -1010] },
   river: { label: '沂河', pos: [520, 140, 380], target: [1180, 10, -420] },
   culture: { label: '文化中心', pos: [-260, 260, 200], target: [-720, 20, -260] },
+  north: { label: '南京路', pos: [650, 320, -3600], target: [-250, 0, -4300] },
 };
 let flight = null;
 function flyTo(key, dur = 2.4) {
@@ -1481,7 +1494,7 @@ function updateFirstPerson(dt) {
     const up = (k.has('KeyE') || k.has('Space') ? 1 : 0) - (k.has('KeyQ') || k.has('KeyC') ? 1 : 0);
     fp.vel.lerp(_fwd.multiplyScalar(mz).addScaledVector(_rt, mx).add(new THREE.Vector3(0, up, 0)).multiplyScalar(sp), Math.min(1, dt * 4));
     camera.position.addScaledVector(fp.vel, dt);
-    camera.position.y = clamp(camera.position.y, 3, 3000);
+    camera.position.y = clamp(camera.position.y, 3, 2600);
     camera.position.x = clamp(camera.position.x, BX0 - 3000, BX1 + 3000);
     camera.position.z = clamp(camera.position.z, BZ0 - 3000, BZ1 + 3000);
   }
