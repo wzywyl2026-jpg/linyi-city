@@ -329,6 +329,67 @@ for b in builds:
     if b['t'] == 'office' and math.hypot(b['cx'] - 321.5, b['cz'] - 1026.5) < 80:
         b['H'] = 9; b['k'] = 'pub'
 
+
+# ---------- CMAB fill-in (satellite-derived footprints + heights, 2022) ----------
+# Zhang et al., CMAB: China Multi-Attribute Building dataset, figshare 27992417, CC BY 4.0.
+# data/cmab.txt holds only buildings missing from OSM. Line format:
+#   {height}{F}{cx},{cz},{len},{wid},{deg}   oriented rectangle
+#   {height}{F}{x0},{z0} dx,dz dx,dz ...      polygon (integer metres, deltas)
+# F: R residence, B business, O office, P public, I industry, X other
+def parse_cmab(path):
+    out = []
+    for line in open(path, encoding='utf8'):
+        m = re.match(r'^(\d*)([RBPOIX])(.*)$', line.strip())
+        if not m:
+            continue
+        H = float(m.group(1)) if m.group(1) else 0.0
+        F, rest = m.group(2), m.group(3)
+        if ' ' not in rest and rest.count(',') == 4:
+            cx, cz, L, W, a = map(float, rest.split(','))
+            ux, uz = math.cos(math.radians(a)), math.sin(math.radians(a))
+            p = [(round(cx + sx * L / 2 * ux - sy * W / 2 * uz, 1), round(cz + sx * L / 2 * uz + sy * W / 2 * ux, 1))
+                 for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+        else:
+            p = dec(rest)
+        out.append((H, F, p))
+    return out
+
+
+def overlaps_osm(p):
+    cx = sum(a for a, _ in p) / len(p); cz = sum(c for _, c in p) / len(p)
+    probes = [(cx, cz)] + [((a + cx) / 2, (c + cz) / 2) for a, c in p]
+    if any(in_building(x, z) for x, z in probes):
+        return True
+    for i in b_grid.get(cx, cz):
+        if pip(builds[i]['cx'], builds[i]['cz'], p):
+            return True
+    return False
+
+
+n_osm = len(builds)
+cm_added = cm_skip = 0
+for H, F, p in parse_cmab('data/cmab.txt'):
+    if len(p) > 3 and p[0] == p[-1]:
+        p = p[:-1]
+    A = abs(area(p))
+    per = sum(math.dist(p[i - 1], p[i]) for i in range(len(p)))
+    if len(p) < 3 or A < 25 or (per and A / per < 1.5):  # slivers / degenerate lines
+        cm_skip += 1; continue
+    cx = sum(a for a, _ in p) / len(p); cz = sum(c for _, c in p) / len(p)
+    if not in_regions(cx, cz, 5) or in_water(cx, cz) or overlaps_osm(p) or near_road(cx, cz, pad=0):
+        cm_skip += 1; continue
+    if area(p) < 0:
+        p.reverse()
+    if not H:
+        H = 9 if F != 'R' else 18
+    k = {'R': 'res', 'B': 'off', 'O': 'off'}.get(F, 'pub')
+    b = dict(h='', lv='', t='cmab', n='', p=p, area=A, cx=cx, cz=cz, k=k, H=round(min(H, 120), 1))
+    builds.append(b)
+    bb = bbox(p)
+    b_grid.add((bb[0] - 3, bb[1] - 3, bb[2] + 3, bb[3] + 3), len(builds) - 1)
+    cm_added += 1
+print('CMAB added', cm_added, 'skipped', cm_skip, '(OSM', n_osm, ')')
+
 # ---------- water banks ----------
 def on_edge(ax, az, bx, bz):
     """Edges lying on a region boundary are extract cut lines, not real banks."""
