@@ -25,6 +25,8 @@
 | --- | --- |
 | `src/app.js` | 三维场景全部代码（Three.js r160）：材质、建筑、道路、水面、电视塔、车流、天气、视角控制 |
 | `src/shell.html` | 页面外壳与控制面板（HTML/CSS），构建时把数据和代码填进去 |
+| `data/manual.txt` | 对照高德卫星影像（2024 年后）补绘的新建建筑，数据集里都没有；格式同 cmab.txt |
+| `data/removed.txt` | 影像上已拆除（裸土或草地、无阴影）的旧轮廓中心点，构建时剔除 |
 | `data/extra.txt` | 第二批补充：CMAB 中第一次被过滤掉的建筑，以及 GlobalBuildingAtlas 里另有的建筑（功能代码 U），格式同 cmab.txt |
 | `data/cmab.txt` | CMAB 补充建筑（只含 OSM 缺失的），每行一栋：`高度 功能 轮廓`，矩形写成 `中心x,中心z,长,宽,角度`，其余写成多边形顶点增量；功能 R 住宅、B 商业、O 办公、P 公共、I 工业、X 其他 |
 | `data/osm.txt` | 南片地图数据（上海路以南到三河口），从 OpenStreetMap 导出的紧凑格式（建筑 B、道路 R、水面 W、绿地 G、河道 V、节点 N） |
