@@ -327,8 +327,29 @@ except FileNotFoundError:
 oh_grid = Grid(50)
 for t in oh:
     oh_grid.add((t[0] - 3, t[1] - 3, t[0] + 3, t[1] + 3), t)
+gba = [tuple(map(float, l.split(','))) for l in open('data/osm_gba.txt') if l[:1] in '-0123456789']
+gba_grid = Grid(50)
+for t in gba:
+    gba_grid.add((t[0] - 3, t[1] - 3, t[0] + 3, t[1] + 3), t)
+n_gba = n_tag_diff = 0
+for b in builds:
+    for t in gba_grid.get(b['cx'], b['cz']):
+        if math.hypot(b['cx'] - t[0], b['cz'] - t[1]) < 3:
+            b['gba'] = t[2]
+            break
+    if 'gba' not in b or b['gba'] < 4:
+        continue
+    if b['h'] or b['lv'].isdigit() or b['n'] in NAMED:
+        # level tags often describe only the podium; GBA undercounts some new towers -> keep the taller
+        if b['gba'] > b['H'] + max(10, 0.5 * b['H']) and b['n'] not in NAMED:
+            b['H'] = round(b['gba'], 1); n_tag_diff += 1
+        continue
+    b['H'] = round(b['gba'], 1); n_gba += 1
+print('OSM heights from GBA', n_gba, '(tagged raised:', n_tag_diff, ')')
 n_oh = 0
 for b in builds:
+    if 'gba' in b and b['gba'] >= 4:
+        continue
     if b['h'] or b['lv'].isdigit() or b['n'] in NAMED:
         continue
     for t in oh_grid.get(b['cx'], b['cz']):

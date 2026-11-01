@@ -26,6 +26,7 @@
 | `src/app.js` | 三维场景全部代码（Three.js r160）：材质、建筑、道路、水面、电视塔、车流、天气、视角控制 |
 | `src/shell.html` | 页面外壳与控制面板（HTML/CSS），构建时把数据和代码填进去 |
 | `data/manual.txt` | 对照高德卫星影像（2024 年后）补绘的新建建筑，数据集里都没有；格式同 cmab.txt |
+| `data/osm_gba.txt` | OSM 建筑的 GlobalBuildingAtlas 高度：未标高度的直接采用；已标层数的取两者较高（层数标签常只写了裙房） |
 | `data/osm_h.txt` | OSM 未标高度建筑的 CMAB 高度（仅在高于原估计时采用，修正被当成两三层的高楼） |
 | `data/removed.txt` | 影像上已拆除（裸土或草地、无阴影）的旧轮廓中心点，构建时剔除 |
 | `data/extra.txt` | 第二批补充：CMAB 中第一次被过滤掉的建筑，以及 GlobalBuildingAtlas 里另有的建筑（功能代码 U），格式同 cmab.txt |
