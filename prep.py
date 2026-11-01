@@ -339,7 +339,7 @@ for b in builds:
 def parse_cmab(path):
     out = []
     for line in open(path, encoding='utf8'):
-        m = re.match(r'^(\d*)([RBPOIX])(.*)$', line.strip())
+        m = re.match(r'^(\d*)([RBPOIXU])(.*)$', line.strip())
         if not m:
             continue
         H = float(m.group(1)) if m.group(1) else 0.0
@@ -366,9 +366,32 @@ def overlaps_osm(p):
     return False
 
 
+MINOR = ('service', 'footway', 'path', 'pedestrian', 'track', 'cycleway', 'steps', 'living_street', 'corridor', 'bridleway')
+
+
+def on_street(x, z):
+    for ax, az, bx, bz, w, ri in seg_grid.get(x, z):
+        if surface_roads[ri]['c'] in MINOR:
+            continue
+        if seg_dist(x, z, ax, az, bx, bz) < w / 2:
+            return True
+    return False
+
+
+def overlaps_added(p, start):
+    cx = sum(a for a, _ in p) / len(p); cz = sum(c for _, c in p) / len(p)
+    for i in b_grid.get(cx, cz):
+        if i >= start and (pip(cx, cz, builds[i]['p']) or pip(builds[i]['cx'], builds[i]['cz'], p)):
+            return True
+    return False
+
+
 n_osm = len(builds)
 cm_added = cm_skip = 0
-for H, F, p in parse_cmab('data/cmab.txt'):
+# data/extra.txt: 2nd pass — CMAB footprints the first filter dropped (prefix R..X) plus
+# GlobalBuildingAtlas LoD1 footprints absent from both OSM and CMAB (prefix U).
+src = parse_cmab('data/cmab.txt') + parse_cmab('data/extra.txt')
+for H, F, p in src:
     if len(p) > 3 and p[0] == p[-1]:
         p = p[:-1]
     A = abs(area(p))
@@ -376,13 +399,16 @@ for H, F, p in parse_cmab('data/cmab.txt'):
     if len(p) < 3 or A < 25 or (per and A / per < 1.5):  # slivers / degenerate lines
         cm_skip += 1; continue
     cx = sum(a for a, _ in p) / len(p); cz = sum(c for _, c in p) / len(p)
-    if not in_regions(cx, cz, 5) or in_water(cx, cz) or overlaps_osm(p) or near_road(cx, cz, pad=0):
+    if F == 'U' and (H < 3 or (H < 6 and A > 400) or A > 20000):  # GBA noise: ground patches
+        cm_skip += 1; continue
+    if not in_regions(cx, cz, 5) or in_water(cx, cz) or overlaps_osm(p) or on_street(cx, cz) \
+            or overlaps_added(p, n_osm):
         cm_skip += 1; continue
     if area(p) < 0:
         p.reverse()
     if not H:
-        H = 9 if F != 'R' else 18
-    k = {'R': 'res', 'B': 'off', 'O': 'off'}.get(F, 'pub')
+        H = 9 if F not in 'RU' else 18
+    k = {'R': 'res', 'U': 'res', 'B': 'off', 'O': 'off'}.get(F, 'pub')
     b = dict(h='', lv='', t='cmab', n='', p=p, area=A, cx=cx, cz=cz, k=k, H=round(min(H, 120), 1))
     builds.append(b)
     bb = bbox(p)

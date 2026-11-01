@@ -3,7 +3,7 @@
 临沂市兰山区北城新区的可交互三维模型，在浏览器里运行。范围约 9.9 × 6.8 km：中片北起南京路，经武汉路、成都路、广州路、济南路、天津路、上海路、北京路，南到五洲湖、电视塔和沂河、祊河、柳青河三河口；西片沿祊河两岸一直到祊河与南京路交汇处，东片沿沂河东岸向北到南京路一线。
 
 - 建筑轮廓、道路、水系来自 OpenStreetMap（真实位置）；缺少高度的建筑按同小区相近建筑的层数推算。
-- OpenStreetMap 在本区域缺了大量建筑，另用 CMAB 数据集（基于 2022 年卫星影像提取的建筑轮廓与高度）补齐约 7300 栋，只补 OSM 里没有的位置。
+- OpenStreetMap 在本区域缺了大量建筑，另用 CMAB 数据集（基于 2022 年卫星影像提取的建筑轮廓与高度）补齐；CMAB 也漏掉的，再用 GlobalBuildingAtlas（全球建筑 LoD1 数据集）补上。合计在 OSM 之外补了约 1 万栋，只补 OSM 里没有的位置，并已对照卫星影像核对过位置。
 - 精建地标：临沂广播电视塔（326 m，球形塔楼、算盘珠、Y 形桁架、螺旋桁架、竹简塔座）、五洲湖及岛屿、沂河/祊河/柳青河石砌河岸与滨水步道。
 - 昼夜（按临沂经纬度和当天日期计算太阳位置）、晴/多云/雨/雾/雪、最多约 1400 辆车的车流、俯瞰/步行/飞行/跟车视角。
 
@@ -25,6 +25,7 @@
 | --- | --- |
 | `src/app.js` | 三维场景全部代码（Three.js r160）：材质、建筑、道路、水面、电视塔、车流、天气、视角控制 |
 | `src/shell.html` | 页面外壳与控制面板（HTML/CSS），构建时把数据和代码填进去 |
+| `data/extra.txt` | 第二批补充：CMAB 中第一次被过滤掉的建筑，以及 GlobalBuildingAtlas 里另有的建筑（功能代码 U），格式同 cmab.txt |
 | `data/cmab.txt` | CMAB 补充建筑（只含 OSM 缺失的），每行一栋：`高度 功能 轮廓`，矩形写成 `中心x,中心z,长,宽,角度`，其余写成多边形顶点增量；功能 R 住宅、B 商业、O 办公、P 公共、I 工业、X 其他 |
 | `data/osm.txt` | 南片地图数据（上海路以南到三河口），从 OpenStreetMap 导出的紧凑格式（建筑 B、道路 R、水面 W、绿地 G、河道 V、节点 N） |
 | `data/osm_north.txt` | 北片地图数据（上海路到南京路以北约 200 m），格式相同；道路在 z = -1770 处与南片精确衔接 |
@@ -55,3 +56,5 @@ python3 build.py    # 每次改了 src/ 之后运行
 地图数据 © OpenStreetMap 贡献者，按 ODbL 授权：https://www.openstreetmap.org/copyright
 
 补充建筑来自 CMAB（China Multi-Attribute Building dataset，Zhang et al.），按 CC BY 4.0 授权：https://doi.org/10.6084/m9.figshare.27992417
+
+另有部分建筑来自 GlobalBuildingAtlas（Zhu et al., 2025, TUM），https://doi.org/10.14459/2025mp1782307
