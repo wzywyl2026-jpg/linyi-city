@@ -318,6 +318,26 @@ for b in builds:
             H = rnd.randint(3, 6) * 4.0
     b['H'] = round(H, 1)
 
+# data/osm_h.txt: "cx,cz,H" — heights for untagged OSM footprints, taken from CMAB footprints
+# (2022 satellite-derived) that fall inside them. Only used when OSM has no height/levels tag.
+try:
+    oh = [tuple(map(float, l.split(','))) for l in open('data/osm_h.txt') if l[:1] in '-0123456789']
+except FileNotFoundError:
+    oh = []
+oh_grid = Grid(50)
+for t in oh:
+    oh_grid.add((t[0] - 3, t[1] - 3, t[0] + 3, t[1] + 3), t)
+n_oh = 0
+for b in builds:
+    if b['h'] or b['lv'].isdigit() or b['n'] in NAMED:
+        continue
+    for t in oh_grid.get(b['cx'], b['cz']):
+        if math.hypot(b['cx'] - t[0], b['cz'] - t[1]) < 3:
+            if t[2] > b['H']:
+                b['H'] = round(t[2], 1); n_oh += 1
+            break
+print('OSM heights from CMAB', n_oh)
+
 # theatre: two shell roofs
 th = [b for b in builds if b['n'] == '临沂大剧院']
 th.sort(key=lambda b: -b['area'])
@@ -386,6 +406,26 @@ def overlaps_added(p, start):
     return False
 
 
+# data/removed.txt: centroids (x,z) of footprints that satellite imagery shows as demolished
+# (bare soil or lawn, no shadow). Datasets built from older imagery still carry them.
+gone = [tuple(map(float, l.split(','))) for l in open('data/removed.txt') if l[:1] in '-0123456789']
+gone_grid = Grid(50)
+for g in gone:
+    gone_grid.add((g[0] - 3, g[1] - 3, g[0] + 3, g[1] + 3), g)
+n_before = len(builds)
+builds = [b for b in builds if not any(math.hypot(b['cx'] - g[0], b['cz'] - g[1]) < 3 for g in gone_grid.get(b['cx'], b['cz']))]
+print('removed demolished OSM', n_before - len(builds), 'of', len(gone))
+b_grid = Grid(60)
+for i, b in enumerate(builds):
+    bb = bbox(b['p'])
+    b_grid.add((bb[0] - 3, bb[1] - 3, bb[2] + 3, bb[3] + 3), i)
+
+
+
+def is_gone(x, z):
+    return any(math.hypot(x - g[0], z - g[1]) < 3 for g in gone_grid.get(x, z))
+
+
 n_osm = len(builds)
 cm_added = cm_skip = 0
 # data/extra.txt: 2nd pass — CMAB footprints the first filter dropped (prefix R..X) plus
@@ -399,6 +439,8 @@ for H, F, p in src:
     if len(p) < 3 or A < 25 or (per and A / per < 1.5):  # slivers / degenerate lines
         cm_skip += 1; continue
     cx = sum(a for a, _ in p) / len(p); cz = sum(c for _, c in p) / len(p)
+    if is_gone(cx, cz):
+        cm_skip += 1; continue
     if F == 'U' and (H < 3 or (H < 6 and A > 400) or A > 20000):  # GBA noise: ground patches
         cm_skip += 1; continue
     if not in_regions(cx, cz, 5) or in_water(cx, cz) or overlaps_osm(p) or on_street(cx, cz) \
@@ -415,20 +457,6 @@ for H, F, p in src:
     b_grid.add((bb[0] - 3, bb[1] - 3, bb[2] + 3, bb[3] + 3), len(builds) - 1)
     cm_added += 1
 print('CMAB added', cm_added, 'skipped', cm_skip, '(OSM', n_osm, ')')
-
-# data/removed.txt: centroids (x,z) of footprints that satellite imagery shows as demolished
-# (bare soil or lawn, no shadow). Datasets built from older imagery still carry them.
-gone = [tuple(map(float, l.split(','))) for l in open('data/removed.txt') if l[:1] in '-0123456789']
-gone_grid = Grid(50)
-for g in gone:
-    gone_grid.add((g[0] - 3, g[1] - 3, g[0] + 3, g[1] + 3), g)
-n_before = len(builds)
-builds = [b for b in builds if not any(math.hypot(b['cx'] - g[0], b['cz'] - g[1]) < 3 for g in gone_grid.get(b['cx'], b['cz']))]
-print('removed demolished', n_before - len(builds), 'of', len(gone))
-b_grid = Grid(60)
-for i, b in enumerate(builds):
-    bb = bbox(b['p'])
-    b_grid.add((bb[0] - 3, bb[1] - 3, bb[2] + 3, bb[3] + 3), i)
 
 # name fixes checked against AMap POI data
 for b in builds:
