@@ -390,7 +390,7 @@ n_osm = len(builds)
 cm_added = cm_skip = 0
 # data/extra.txt: 2nd pass — CMAB footprints the first filter dropped (prefix R..X) plus
 # GlobalBuildingAtlas LoD1 footprints absent from both OSM and CMAB (prefix U).
-src = parse_cmab('data/cmab.txt') + parse_cmab('data/extra.txt')
+src = parse_cmab('data/cmab.txt') + parse_cmab('data/extra.txt') + parse_cmab('data/manual.txt')
 for H, F, p in src:
     if len(p) > 3 and p[0] == p[-1]:
         p = p[:-1]
@@ -415,6 +415,25 @@ for H, F, p in src:
     b_grid.add((bb[0] - 3, bb[1] - 3, bb[2] + 3, bb[3] + 3), len(builds) - 1)
     cm_added += 1
 print('CMAB added', cm_added, 'skipped', cm_skip, '(OSM', n_osm, ')')
+
+# data/removed.txt: centroids (x,z) of footprints that satellite imagery shows as demolished
+# (bare soil or lawn, no shadow). Datasets built from older imagery still carry them.
+gone = [tuple(map(float, l.split(','))) for l in open('data/removed.txt') if l[:1] in '-0123456789']
+gone_grid = Grid(50)
+for g in gone:
+    gone_grid.add((g[0] - 3, g[1] - 3, g[0] + 3, g[1] + 3), g)
+n_before = len(builds)
+builds = [b for b in builds if not any(math.hypot(b['cx'] - g[0], b['cz'] - g[1]) < 3 for g in gone_grid.get(b['cx'], b['cz']))]
+print('removed demolished', n_before - len(builds), 'of', len(gone))
+b_grid = Grid(60)
+for i, b in enumerate(builds):
+    bb = bbox(b['p'])
+    b_grid.add((bb[0] - 3, bb[1] - 3, bb[2] + 3, bb[3] + 3), i)
+
+# name fixes checked against AMap POI data
+for b in builds:
+    if b['n'] == '天元商务大厦' and math.hypot(b['cx'] + 752, b['cz'] + 1610) < 60:
+        b['n'] = '临沂市人民政府'; b['k'] = 'off'
 
 # ---------- water banks ----------
 def on_edge(ax, az, bx, bz):
