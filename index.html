@@ -735,6 +735,7 @@ function buildBuildings() {
     col.set(tint).convertSRGBToLinear();
     const cx = p.reduce((s, q) => s + q[0], 0) / p.length, cz = p.reduce((s, q) => s + q[1], 0) / p.length;
     world.buildings.push({ p, H, name, cx, cz });
+    if (LANDMARKS.has(name)) continue;
     const g = isShell ? shell : B[k];
     const wallH = isShell ? H * 0.42 : H;
     let acc = R() * 28;
@@ -1013,30 +1014,32 @@ function buildTower() {
   const plazaTex = TEX.paver.clone(); plazaTex.repeat.set(31, 31); plazaTex.needsUpdate = true;
   const plaza = new THREE.Mesh(new THREE.CircleGeometry(62, 64), new THREE.MeshStandardMaterial({ map: plazaTex, roughness: 0.85 }));
   plaza.rotation.x = -Math.PI / 2; plaza.position.y = 0.2; plaza.receiveShadow = true; grp.add(plaza);
-  // core shaft
-  add(new THREE.CylinderGeometry(4.3, 6.6, 205, 32, 1), steel).position.y = 102.5;
-  add(new THREE.CylinderGeometry(3.6, 4.3, 64, 32, 1), steel).position.y = 237;
-  // spherical pod (observation sphere) with glass mullion rings
-  const PC = 228, PR = 21;
-  const sph = add(new THREE.SphereGeometry(PR, 64, 40), glass);
-  sph.position.y = PC;
-  for (const dy of [-16, -11, -5.5, 5.5, 11, 16]) {
-    const rr = Math.sqrt(PR * PR - dy * dy);
-    const t = add(new THREE.TorusGeometry(rr + 0.08, 0.16, 6, 72), steel, false); t.rotation.x = Math.PI / 2; t.position.y = PC + dy;
+  // core shaft: Ø8.5 m steel tube (the brush handle), slightly flared at the foot
+  add(new THREE.CylinderGeometry(4.25, 6.2, 60, 32, 1), steel).position.y = 30;
+  add(new THREE.CylinderGeometry(4.25, 4.25, 140, 32, 1), steel).position.y = 130;
+  // tower block 200–228 m shaped as the brush tip (笔头): swells out of the handle, tapers up into the mast
+  const PC = 214;
+  const tipProfile = [[4.3, 194], [9, 198.5], [15.5, 203], [19.5, 208], [21, 213], [20.2, 218], [17, 223], [12.5, 228], [7.5, 233], [3.6, 238], [2.4, 242]];
+  const tip = add(new THREE.LatheGeometry(tipProfile.map(([r, y]) => new THREE.Vector2(r, y)), 64), glass);
+  // horizontal mullion rings on the glass, following the profile
+  for (let k = 1; k < tipProfile.length - 1; k++) {
+    const [r, y] = tipProfile[k];
+    const t = add(new THREE.TorusGeometry(r + 0.08, 0.18, 6, 72), steel, false); t.rotation.x = Math.PI / 2; t.position.y = y;
   }
-  for (let k = 0; k < 16; k++) {
-    const t = add(new THREE.TorusGeometry(PR + 0.06, 0.12, 4, 64, Math.PI), steel, false);
-    t.rotation.y = (k / 16) * Math.PI; t.rotation.z = Math.PI / 2; t.position.y = PC;
+  // meridian ribs drawn to the tip, like the hairs of a brush gathering to a point
+  for (let k = 0; k < 24; k++) {
+    const a = (k / 24) * Math.PI * 2;
+    const pts = tipProfile.map(([r, y]) => new THREE.Vector3(Math.cos(a) * (r + 0.12), y, Math.sin(a) * (r + 0.12)));
+    add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.13, 4), steel, false);
   }
-  // 224 m outdoor deck ring around the sphere's equator band
-  add(new THREE.CylinderGeometry(PR + 2.6, PR + 2.6, 0.7, 72), white).position.y = 223.6;
-  { const t = add(new THREE.TorusGeometry(PR + 2.5, 0.07, 4, 96), steel, false); t.rotation.x = Math.PI / 2; t.position.y = 224.9; }
-  // mast with stepped antenna
-  add(new THREE.CylinderGeometry(1.15, 1.7, 32, 16), steel).position.y = 286;
-  add(new THREE.CylinderGeometry(0.35, 0.95, 24, 12), steel).position.y = 314;
-  // 算盘珠: stainless beads on the shaft
-  const bead = new THREE.LatheGeometry([[4.3, -1.9], [8.6, -0.3], [8.6, 0.3], [4.3, 1.9]].map(([r, y]) => new THREE.Vector2(r, y)), 32);
-  for (const y of [128, 140, 152, 164, 176, 188]) add(bead, steel).position.y = y;
+  // open observation platform ring at the widest point (~218 m)
+  add(new THREE.CylinderGeometry(23.4, 23.4, 0.7, 72), white).position.y = 217.6;
+  { const t = add(new THREE.TorusGeometry(23.3, 0.07, 4, 96), steel, false); t.rotation.x = Math.PI / 2; t.position.y = 218.9; }
+  // 98 m antenna mast rising from the tip to 326 m
+  add(new THREE.CylinderGeometry(1.5, 2.4, 40, 16), steel).position.y = 262;
+  add(new THREE.CylinderGeometry(0.9, 1.5, 30, 12), steel).position.y = 297;
+  add(new THREE.CylinderGeometry(0.25, 0.9, 14, 10), steel).position.y = 319;
+  for (const y of [252, 270, 288]) { const t = add(new THREE.TorusGeometry(y < 280 ? 2.2 : 1.5, 0.25, 6, 24), steel, false); t.rotation.x = Math.PI / 2; t.position.y = y; }
   // three Y-shaped trusses
   const legR = 1.25;
   for (let k = 0; k < 3; k++) {
@@ -1089,13 +1092,13 @@ function buildTower() {
     m.rotation.x = -0.32;
   }
   // aviation beacons
-  for (const y of [TH, 298, 270, 226]) {
+  for (const y of [TH, 298, 270, 218]) {
     const b = new THREE.Mesh(new THREE.SphereGeometry(y === TH ? 0.9 : 0.6, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff2a1a }));
-    if (y === TH) b.position.y = y; else { b.position.set(y === 226 ? 23.4 : 1.8, y, 0); }
+    if (y === TH) b.position.y = y; else { b.position.set(y === 218 ? 23.4 : 2.2, y, 0); }
     grp.add(b); towerBeacons.push(b);
   }
   // warm pod glow for night
-  towerGlow = glass;
+  towerGlow = glass; tip.userData.pc = PC;
   scene.add(grp);
   world.tower = grp;
 }
@@ -1323,6 +1326,210 @@ function walkAt(x, z) {
   return { ok: m.data[k] > 128, h: m.data[k + 1] / 20 };
 }
 
+// ---------- 地标建筑：按卫星影像与公开资料定制的模型 ----------
+// 这些建筑不走通用挤出，而由 buildLandmarks() 按真实造型单独建模。
+const LANDMARKS = new Set(['临沂大剧院', '临沂市博物馆', '临沂市科技馆', '临沂市人民政府', '临沂市文化中心']);
+function buildLandmarks() {
+  const grp = new THREE.Group();
+  const M = {
+    white: new THREE.MeshStandardMaterial({ color: 0xf3f1ec, roughness: 0.42, metalness: 0.08 }),
+    granite: new THREE.MeshStandardMaterial({ color: 0xd8d1c4, roughness: 0.8 }),
+    beige: new THREE.MeshStandardMaterial({ color: 0xcdbb9c, roughness: 0.85 }),
+    glass: new THREE.MeshStandardMaterial({ color: 0x7f97a6, roughness: 0.08, metalness: 0.9, envMapIntensity: 1.3, emissive: 0xffd9a0, emissiveIntensity: 0 }),
+    dark: new THREE.MeshStandardMaterial({ color: 0x4d5257, roughness: 0.7 }),
+    slate: new THREE.MeshStandardMaterial({ color: 0x3e4247, roughness: 0.55, metalness: 0.2 }),
+    terra: new THREE.MeshStandardMaterial({ color: 0xa8664a, roughness: 0.85 }),
+    roofBrown: new THREE.MeshStandardMaterial({ color: 0x9a7a62, roughness: 0.9 }),
+    metal: new THREE.MeshStandardMaterial({ color: 0xc9ced2, roughness: 0.3, metalness: 0.85 }),
+  };
+  world.landmarkGlass = M.glass;
+  const add = (g, m, cast = true) => { const me = new THREE.Mesh(g, m); me.castShadow = cast; me.receiveShadow = true; grp.add(me); return me; };
+  const box = (x0, z0, x1, z1, y0, y1, m, rot = 0) => {
+    const me = add(new THREE.BoxGeometry(Math.abs(x1 - x0), y1 - y0, Math.abs(z1 - z0)), m);
+    me.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); me.rotation.y = rot; return me;
+  };
+  const prism = (ring, y0, y1, m) => { // vertical extrusion of an [x,z] ring
+    const s = shapeFrom(ring);
+    const g = new THREE.ExtrudeGeometry(s, { depth: y1 - y0, bevelEnabled: false });
+    g.rotateX(-Math.PI / 2); g.translate(0, y0, 0);
+    return add(g, m);
+  };
+  // walls with metre-based UVs so the procedural facade textures tile at true window spacing
+  const winMats = [];
+  const winMat = (base, color) => { const m = base.clone(); m.vertexColors = false; m.color = new THREE.Color(color); winMats.push([m, base === MAT.off ? 0.75 : 0.9]); return m; };
+  world.landmarkWin = winMats;
+  const walls = (ring, y0, y1, m) => {
+    const pos = [], uv = [], nrm = []; let acc = 0;
+    for (let i = 0; i < ring.length; i++) {
+      const [ax, az] = ring[i], [bx, bz] = ring[(i + 1) % ring.length];
+      const L = Math.hypot(bx - ax, bz - az); if (L < 0.05) continue;
+      const nx = (bz - az) / L, nz = -(bx - ax) / L;
+      pos.push(ax, y0, az, bx, y0, bz, bx, y1, bz, ax, y0, az, bx, y1, bz, ax, y1, az);
+      uv.push(acc, y0, acc + L, y0, acc + L, y1, acc, y0, acc + L, y1, acc, y1);
+      for (let k = 0; k < 6; k++) nrm.push(nx, 0, nz);
+      acc += L;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    const me = add(g, m); m.side = THREE.DoubleSide; return me;
+  };
+  const rectRing = (x0, z0, x1, z1) => [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
+  const footprint = (name) => D.b.filter((b) => b[4] === name).map((b) => { let p = pairs(b[0]); if (polyArea(p) < 0) p = p.slice().reverse(); return p; });
+
+  // ===== 临沂大剧院：两座螺旋上升的“海螺”壳体，以 S 形飘带屋面相连（CADG 设计，高 37 m）=====
+  // ribbon(centerline pts, width, heights): a solid band with a sloped roof, glass outer walls
+  const ribbon = (pts, wFn, hFn, roofM, wallM) => {
+    const n = pts.length; const P = new Float32Array(0);
+    const pos = [], idx = [];
+    const L = [], Rr = [];
+    for (let i = 0; i < n; i++) {
+      const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
+      let tx = b[0] - a[0], tz = b[1] - a[1]; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
+      const w = wFn(i / (n - 1)) / 2;
+      L.push([pts[i][0] - tz * w, pts[i][1] + tx * w]); Rr.push([pts[i][0] + tz * w, pts[i][1] - tx * w]);
+    }
+    const roof = new THREE.BufferGeometry(), wall = new THREE.BufferGeometry();
+    const rp = [], wp = [];
+    for (let i = 0; i < n - 1; i++) {
+      const h0 = hFn(i / (n - 1)), h1 = hFn((i + 1) / (n - 1));
+      const [l0, l1, r0, r1] = [L[i], L[i + 1], Rr[i], Rr[i + 1]];
+      // roof: slight cross-fall so the band reads as a sweeping blade
+      rp.push(l0[0], h0, l0[1], r0[0], h0 - 1.2, r0[1], r1[0], h1 - 1.2, r1[1], l0[0], h0, l0[1], r1[0], h1 - 1.2, r1[1], l1[0], h1, l1[1]);
+      for (const [p0, p1, d0, d1] of [[l0, l1, h0, h1], [r1, r0, h1 - 1.2, h0 - 1.2]]) {
+        wp.push(p0[0], 0, p0[1], p1[0], 0, p1[1], p1[0], d1, p1[1], p0[0], 0, p0[1], p1[0], d1, p1[1], p0[0], d0, p0[1]);
+      }
+    }
+    roof.setAttribute('position', new THREE.Float32BufferAttribute(rp, 3)); roof.computeVertexNormals();
+    wall.setAttribute('position', new THREE.Float32BufferAttribute(wp, 3)); wall.computeVertexNormals();
+    const rm = add(roof, roofM); rm.material = roofM; roofM.side = THREE.DoubleSide;
+    const wm = add(wall, wallM); wallM.side = THREE.DoubleSide;
+    return [L, Rr];
+  };
+  const spiralPts = (cx, cz, a0, dir, turns, r0, r1, n) => {
+    const out = [];
+    for (let i = 0; i <= n; i++) { const t = i / n, a = a0 + dir * t * turns * Math.PI * 2, r = lerp(r0, r1, t); out.push([cx + Math.cos(a) * r, cz + Math.sin(a) * r]); }
+    return out;
+  };
+  const shellRoof = M.white.clone(); shellRoof.roughness = 0.3; shellRoof.metalness = 0.25;
+  const shellWall = M.glass;
+  const fins = (pts, every, h0, h1) => { // vertical granite "bamboo slip" fins along the outer edge
+    for (let i = 0; i < pts.length; i += every) {
+      const t = i / (pts.length - 1), h = lerp(h0, h1, t) - 1.5;
+      const me = add(new THREE.BoxGeometry(0.9, h, 0.9), M.granite, false); me.position.set(pts[i][0], h / 2, pts[i][1]);
+    }
+  };
+  {
+    // snail shell: the roof surface runs from the spiral's outer edge up to the drum, so each coil
+    // steps up toward the centre; glazed outer wall with granite fins along the spiral edge
+    const snail = (cx, cz, a0, dir, turns, rOut0, rOut1, rd, y0, y1, yd) => {
+      const n = Math.round(turns * 140), rp = [], wp = [];
+      const E = [];
+      for (let i = 0; i <= n; i++) {
+        const t = i / n, a = a0 + dir * t * turns * Math.PI * 2;
+        const ro = lerp(rOut0, rOut1, t), y = lerp(y0, y1, t * t * 0.4 + t * 0.6);
+        E.push([cx + Math.cos(a) * ro, y, cz + Math.sin(a) * ro, cx + Math.cos(a) * rd, cz + Math.sin(a) * rd]);
+      }
+      const RS = 6; // radial subdivisions with a convex (domed) profile
+      const pt = (e, k) => { const u = k / RS, yy = lerp(e[1], yd, Math.sin(u * Math.PI / 2)); return [lerp(e[0], e[3], u), yy, lerp(e[2], e[4], u)]; };
+      for (let i = 0; i < n; i++) {
+        for (let k = 0; k < RS; k++) {
+          const A = pt(E[i], k), B = pt(E[i + 1], k), C = pt(E[i + 1], k + 1), Dd = pt(E[i], k + 1);
+          rp.push(...A, ...B, ...C, ...A, ...C, ...Dd);
+        }
+        const [x0, h0, z0] = E[i], [x1, h1, z1] = E[i + 1];
+        wp.push(x0, 0, z0, x1, 0, z1, x1, h1, z1, x0, 0, z0, x1, h1, z1, x0, h0, z0);
+      }
+      // closing face at the spiral's start
+      for (let k = 0; k < RS; k++) { const A = pt(E[0], k), B = pt(E[0], k + 1); wp.push(A[0], 0, A[2], B[0], 0, B[2], ...B, A[0], 0, A[2], ...B, ...A); }
+      const gR = new THREE.BufferGeometry(); gR.setAttribute('position', new THREE.Float32BufferAttribute(rp, 3)); gR.computeVertexNormals();
+      const gW = new THREE.BufferGeometry(); gW.setAttribute('position', new THREE.Float32BufferAttribute(wp, 3)); gW.computeVertexNormals();
+      shellRoof.side = THREE.DoubleSide; shellWall.side = THREE.DoubleSide;
+      add(gR, shellRoof); add(gW, shellWall);
+      fins(E.map((e) => [e[0], e[2]]), 3, y0, y1);
+      const d = add(new THREE.CylinderGeometry(rd, rd, yd, 64), M.granite); d.position.set(cx, yd / 2, cz);
+      const r = add(new THREE.CylinderGeometry(rd - 0.6, rd - 0.6, 0.6, 64), M.roofBrown, false); r.position.set(cx, yd + 0.2, cz);
+      return E;
+    };
+    // big shell (grand theatre) and small shell (concert hall), centres measured from imagery
+    const C1 = [-772, -224], C2 = [-735, -310];
+    const E1 = snail(C1[0], C1[1], Math.PI * 1.02, -1, 1.12, 66, 44, 21, 7, 24, 35);
+    const E2 = snail(C2[0], C2[1], 0.05, -1, 0.95, 38, 31, 19, 6, 17, 26);
+    const sp1 = [[E1[0][0], E1[0][2]]], sp2 = [[E2[0][0], E2[0][2]]];
+    // S-shaped sweeping bands: north tail into the big shell, small shell's tail wrapping the big one
+    const curve = (arr, n) => new THREE.CatmullRomCurve3(arr.map(([x, z]) => new THREE.Vector3(x, 0, z))).getPoints(n).map((v) => [v.x, v.z]);
+    const tailA = curve([[-816, -400], [-810, -364], [-805, -337], [-816, -309], [-832, -281], [-843, -250], sp1[0]], 60);
+    ribbon(tailA, (t) => lerp(14, 24, t), (t) => lerp(3, 6, t), shellRoof, shellWall);
+    const tailB = curve([sp2[0], [-688, -280], [-676, -250], [-674, -222], [-680, -192], [-693, -164], [-703, -140]], 60);
+    ribbon(tailB, (t) => lerp(17, 12, t), (t) => lerp(5, 3, t), shellRoof, shellWall);
+  }
+
+  // ===== 临沂市博物馆：“四本书叠加”的造型，4 层，北城馆 =====
+  {
+    const L = [[-816, 10, -696, 93], [-806, 19, -698, 88], [-796, 26, -708, 84], [-787, 37, -717, 80]];
+    const rots = [0, 0.028, -0.02, 0.035];
+    L.forEach(([x0, z0, x1, z1], i) => {
+      const y0 = i * 5.4, y1 = y0 + 5.4;
+      box(x0, z0, x1, z1, y0 + 0.7, y1 - 0.7, M.white, rots[i]);                    // page block
+      box(x0 - 0.8, z0 - 0.8, x1 + 0.8, z1 + 0.8, y0, y0 + 0.7, M.slate, rots[i]);   // lower cover
+      box(x0 - 0.8, z0 - 0.8, x1 + 0.8, z1 + 0.8, y1 - 0.7, y1, i === 3 ? M.terra : M.slate, rots[i]); // upper cover
+      // spine band on the long south face
+      const sp = box(x0 + 3, z1 + 0.2, x1 - 3, z1 + 1.2, y0 + 1.6, y1 - 1.6, M.beige, rots[i]);
+    });
+  }
+
+  // ===== 临沂市科技馆：白色“画框”包边的展厅 + 北侧高体量 =====
+  {
+    const [x0, z0, x1, z1] = [-816, 207, -679, 292];
+    box(x0 + 1, z0 + 1, x1 - 1, z1 - 1, 0, 21, M.glass);
+    box(x0 + 3, z0 + 3, x1 - 3, z1 - 3, 21, 21.6, M.dark, false);
+    const fw = 6.5, fy0 = 0, fy1 = 26; // the white frame wraps the box on all four sides
+    box(x0, z0, x1, z0 + fw, 18, fy1, M.white); box(x0, z1 - fw, x1, z1, 18, fy1, M.white);
+    box(x0, z0, x0 + fw, z1, 18, fy1, M.white); box(x1 - fw, z0, x1, z1, 18, fy1, M.white);
+    box(x0, z0, x0 + 2.5, z1, 0, 18, M.white); box(x1 - 2.5, z0, x1, z1, 0, 18, M.white);
+    for (const [a, b, c, d] of [[-790, 231, -771, 256], [-741, 221, -699, 256], [-733, 261, -707, 284]]) box(a, b, c, d, 21.6, 23.2, M.beige);
+    walls(rectRing(-753, 167, -689, 207), 0, 38, winMat(MAT.off, 0xdfe6ea)); box(-753, 167, -689, 207, 37.5, 39, M.white);
+  }
+
+  // ===== 临沂市人民政府：弧形主楼 + 玻璃屋顶中厅 + 柱廊 + 两端圆塔 =====
+  {
+    const fp = footprint('临沂市人民政府');
+    const H = 52;
+    const govWall = winMat(MAT.pub, 0xf1ece3);
+    for (const p of fp) { walls(p, 0, H, govWall); add(flatShapeGeo([p], H), M.white); walls(p, H, H + 1.4, M.white); }
+    box(-798, -1630, -708, -1612, H, H + 9, M.glass); box(-801, -1632, -705, -1610, H + 9, H + 10, M.white);
+    // front colonnade following the curved facade, with a canopy
+    const arc = new THREE.QuadraticBezierCurve(new THREE.Vector2(-838, -1600), new THREE.Vector2(-755, -1616), new THREE.Vector2(-672, -1600));
+    const cols = arc.getSpacedPoints(30);
+    for (const v of cols) { const c = add(new THREE.CylinderGeometry(0.75, 0.85, 20, 12), M.white, false); c.position.set(v.x, 10, v.y + 3.5); }
+    const can = arc.getSpacedPoints(60);
+    for (let i = 0; i < can.length - 1; i++) {
+      const a = can[i], b = can[i + 1];
+      const me = add(new THREE.BoxGeometry(Math.hypot(b.x - a.x, b.y - a.y) + 0.2, 1.4, 8), M.white, false);
+      me.position.set((a.x + b.x) / 2, 20.7, (a.y + b.y) / 2 + 2.5); me.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x);
+    }
+    for (const [cx, cz] of [[-832, -1594], [-675, -1594]]) {
+      const d = add(new THREE.CylinderGeometry(5.5, 5.5, 24, 32), M.white); d.position.set(cx, 12, cz);
+      const dm = add(new THREE.SphereGeometry(5.6, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), M.glass); dm.position.set(cx, 24, cz);
+    }
+  }
+
+  // ===== 临沂市文化中心：X 形四翼 + 中央大厅（白色格构屋顶、圆环）+ 北侧穹顶 =====
+  {
+    const fp = footprint('临沂市文化中心');
+    for (const p of fp) { prism(p, 0, 13, M.beige); prism(p, 13, 14, M.terra); }
+    { const m = winMat(MAT.pub, 0xe9e2d4); walls(rectRing(-819, -629, -687, -580), 0, 24, m); box(-818.5, -628.5, -687.5, -580.5, 0, 23.8, M.granite); }
+    box(-819, -629, -687, -580, 24, 24.5, M.dark, false);
+    // white pergola grid with a central ring
+    for (let x = -788; x <= -718; x += 11.7) box(x - 0.6, -617, x + 0.6, -585, 24.5, 27, M.white);
+    for (let z = -617; z <= -585; z += 10.7) box(-788, z - 0.6, -718, z + 0.6, 24.5, 27, M.white);
+    const ring = add(new THREE.TorusGeometry(17.5, 1.1, 8, 64), M.white); ring.rotation.x = Math.PI / 2; ring.position.set(-753, 27, -601);
+    { const m = winMat(MAT.pub, 0xe9e2d4); walls(rectRing(-807, -666, -709, -629), 0, 20, m); box(-806.5, -665.5, -709.5, -629.5, 0, 19.8, M.granite); }
+    const dome = add(new THREE.SphereGeometry(11, 32, 14, 0, Math.PI * 2, 0, Math.PI / 2), M.white); dome.position.set(-777, 20, -644);
+  }
+
+  scene.add(grp);
+}
+
 // ---------- landmark labels ----------
 function centroidOf(name) {
   const bs = world.buildings.filter((b) => b.name === name);
@@ -1497,6 +1704,8 @@ function updateEnvironment(dt, t) {
   carTail.material.color.setRGB(1, 0.12, 0.06).multiplyScalar(0.8 + clamp(lamp + w.rain, 0, 1) * 4);
   carBeam.material.opacity = clamp(lamp, 0, 1) * 0.35;
   towerGlow.emissiveIntensity = lights * 0.55;
+  if (world.landmarkGlass) world.landmarkGlass.emissiveIntensity = lights * 0.3;
+  if (world.landmarkWin) for (const [m, k] of world.landmarkWin) m.emissiveIntensity = lights * k;
   const hue = (t * 0.03) % 1;
   for (let i = 0; i < towerLED.length; i++) towerLED[i].visible = lights > 0.04;
   for (let i = 0; i < towerLED.length; i++) towerLED[i].material.color.setHSL((hue + i * 0.08) % 1, 0.85, 0.55).multiplyScalar(lights * 4.5);
@@ -1534,6 +1743,7 @@ const PLACES = {
   lake: { label: '五洲湖', pos: [-380, 330, -560], target: [-760, 0, -1010] },
   river: { label: '沂河', pos: [520, 140, 380], target: [1180, 10, -420] },
   culture: { label: '文化中心', pos: [-260, 260, 200], target: [-720, 20, -260] },
+  gov: { label: '市政府', pos: [-560, 150, -1330], target: [-760, 30, -1610] },
   north: { label: '南京路', pos: [650, 320, -3600], target: [-250, 0, -4300] },
   fang: { label: '祊河', pos: [-3000, 420, -1700], target: [-4200, 0, -2650] },
   yieast: { label: '沂河东岸', pos: [3300, 380, -1500], target: [2100, 0, -2900] },
@@ -1752,7 +1962,7 @@ addEventListener('resize', onResize);
 // ---------- boot ----------
 const steps = [
   ['生成材质', buildTextures], ['准备材质', buildMaterials], ['铺设地面与水面', buildGround], ['种植绿地', buildGreens],
-  ['砌筑河岸', buildBanks], ['拉起建筑', buildBuildings], ['铺设道路与桥梁', buildRoads], ['种树', buildTrees],
+  ['砌筑河岸', buildBanks], ['拉起建筑', buildBuildings], ['塑造地标', buildLandmarks], ['铺设道路与桥梁', buildRoads], ['种树', buildTrees],
   ['安装路灯', buildLamps], ['建造电视塔', buildTower], ['放出车流', buildTraffic], ['准备天气', buildWeatherFX],
   ['计算步行范围', buildWalkMask], ['标注地标', buildLabels],
 ];
